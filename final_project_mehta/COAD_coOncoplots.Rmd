@@ -1,0 +1,104 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(ggplot2)
+knitr::opts_knit$set(root.dir = normalizePath("/Users/riddheemehta/Desktop/Code/QBIO/qbio_490_riddhee/analysis_data")) 
+```
+
+```{r}
+#remove patients with no age information
+age_na_mask <- `ifelse(is.na(clinic$age_at_initial_pathologic_diagnosis), F, T)`
+age_cleaned_clinical <- clinic[age_na_mask, ]
+
+#create a column in age_cleaned_clinical where patients are labeled "Young", "Middle", or "Old"
+EO_mask <- ifelse(age_cleaned_clinical$age_at_initial_pathologic_diagnosis <= 50, T, F)
+LO_mask <- ifelse(age_cleaned_clinical$age_at_initial_pathologic_diagnosis > 50, T, F)
+age_cleaned_clinical$diagnosis_status <- ifelse(EO_mask, "Early Onset", "Late Onset")
+
+maf_object@clinical.data$diagnosis_status <- ifelse(maf_object@clinical.data$age_at_initial_pathologic_diagnosis > 50,'Late Onset', 'Early Onset')
+```
+
+```{r}
+EO_mask <- ifelse(maf_object@clinical.data$diagnosis_status == 'Early Onset', T, F)
+
+EO_patient_barcodes <- maf_object@clinical.data$Tumor_Sample_Barcode[EO_mask]
+
+EO_maf <- subsetMaf(maf = maf_object,
+                           tsb = EO_patient_barcodes)
+```
+
+
+```{r}
+EO_female_mask <- ifelse(EO_maf@clinical.data$gender == 'FEMALE', T, F)
+
+EO_female_patient_barcodes <- EO_maf@clinical.data$Tumor_Sample_Barcode[EO_female_mask]
+
+EO_female_maf <- subsetMaf(maf = EO_maf,
+                           tsb = EO_female_patient_barcodes)
+```
+
+
+```{r}
+EO_male_mask <- ifelse(EO_maf@clinical.data$gender == 'MALE', T, F)
+
+EO_male_patient_barcodes <- EO_maf@clinical.data$Tumor_Sample_Barcode[EO_male_mask]
+
+EO_male_maf <- subsetMaf(maf = EO_maf,
+                         tsb = EO_male_patient_barcodes)
+```
+
+
+```{r}
+coOncoplot(m1 = EO_female_maf, 
+           m2 = EO_male_maf, 
+           m1Name = 'Female', 
+           m2Name = 'Male', 
+           borderCol = NA)
+
+ggsave("EO_coOncoplot.png")
+```
+
+
+```{r}
+LO_mask <- ifelse(maf_object@clinical.data$diagnosis_status == 'Late Onset', T, F)
+
+LO_patient_barcodes <- maf_object@clinical.data$Tumor_Sample_Barcode[LO_mask]
+
+LO_maf <- subsetMaf(maf = maf_object,
+                    tsb = LO_patient_barcodes)
+```
+
+
+```{r}
+LO_female_mask <- ifelse(LO_maf@clinical.data$gender == 'FEMALE', T, F)
+
+LO_female_patient_barcodes <- LO_maf@clinical.data$Tumor_Sample_Barcode[LO_female_mask]
+
+LO_female_maf <- subsetMaf(maf = LO_maf,
+                           tsb = LO_female_patient_barcodes)
+```
+
+
+```{r}
+LO_male_mask <- ifelse(LO_maf@clinical.data$gender == 'MALE', T, F)
+
+LO_male_patient_barcodes <- LO_maf@clinical.data$Tumor_Sample_Barcode[LO_male_mask]
+
+LO_male_maf <- subsetMaf(maf = LO_maf,
+                         tsb = LO_male_patient_barcodes)
+```
+
+
+```{r}
+coOncoplot(m1 = LO_female_maf, 
+           m2 = LO_male_maf, 
+           m1Name = 'Female', 
+           m2Name = 'Male', 
+           borderCol = NA)
+
+ggsave("LO_coOncoplot.png")
+```
+

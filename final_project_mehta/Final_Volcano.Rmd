@@ -1,0 +1,184 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+rna_clinical <- rna_se@colData[!is.na(rna_se@colData$age_at_index), ]
+
+#OR
+
+na_mask <- !is.na(rna_se@colData$age_at_index)
+rna_clinical <- rna_se@colData[na_mask, ]
+
+rna_clinical <- as.data.frame(rna_clinical)
+
+treatments_mask <- ifelse(colnames(rna_clinical) == "treatments", F, T)
+
+rna_clinical <- rna_clinical[, treatments_mask]
+```
+
+```{r}
+rna_genes <- rna_se@rowRanges@elementMetadata
+rna_genes <- as.data.frame(rna_genes)
+```
+
+```{r}
+rna_counts <- rna_se@assays@data$unstranded[, na_mask]
+rna_counts <- as.data.frame(rna_counts)
+```
+
+```{r}
+rna_clinical$diagnosis_status <- ifelse(rna_clinical$age_at_index <= 50, "EO", "LO")
+rna_clinical$diagnosis_status <- factor(rna_clinical$diagnosis_status)
+summary(rna_clinical$diagnosis_status)
+```
+
+```{r}
+rownames(rna_genes) <- rna_genes$gene_id
+rownames(rna_counts) <- rownames(rna_genes)
+colnames(rna_counts) <- rownames(rna_clinical)
+```
+
+```{r}
+def_mask <- ifelse(rna_clinical$definition == "Solid Tissue Normal", F, T)
+rna_counts <- rna_counts[ ,def_mask]
+rna_clinical <- rna_clinical[def_mask, ]
+unique(rna_clinical$definition)
+
+```
+
+```{r}
+EO_mask <- ifelse(rna_clinical$diagnosis_status == "EO", T, F)
+EO_rna_counts <- rna_counts[ ,EO_mask]
+EO_rna_clinical <- rna_clinical[EO_mask, ]
+```
+
+```{r}
+LO_mask <- ifelse(rna_clinical$diagnosis_status == "LO", T, F)
+LO_rna_counts <- rna_counts[ ,LO_mask]
+LO_rna_clinical <- rna_clinical[LO_mask, ]
+```
+
+```{r}
+knitr::opts_knit$set(root.dir = normalizePath("/Users/riddheemehta/Desktop/Code/QBIO/qbio_490_riddhee")) 
+```
+
+```{r}
+# install "DESeq2" using BiocManager::install()
+if(!require(BiocManager)){
+  install.packages("BiocManager")
+}
+library(BiocManager)
+#BiocManager::install("DESeq2")
+# load DESEq2
+library(DESeq2)
+```
+
+```{r}
+sum(is.na(EO_rna_clinical$diagnosis_status))
+sum(is.na(EO_rna_clinical$ajcc_pathologic_stage))
+sum(is.na(EO_rna_clinical$gender))
+
+sum(is.na(LO_rna_clinical$diagnosis_status))
+sum(is.na(LO_rna_clinical$ajcc_pathologic_stage))
+sum(is.na(LO_rna_clinical$gender))
+```
+
+```{r}
+na_mask <- !is.na(rna_clinical$ajcc_pathologic_stage)
+  
+rna_clinical <-  rna_clinical[na_mask,]
+
+rna_counts <-  rna_counts[, na_mask]
+```
+
+
+```{r}
+# use rowSums() to create a list with the total number of counts of each gene
+row_sums <- rowSums(rna_counts)
+
+# create a boolean mask where genes with < 10 total counts are FALSE, and genes with >= 10 total counts are TRUE
+low_counts_mask <- ifelse(row_sums >= 10, T, F)
+
+# rewrite the rna_counts df, subsetting for only genes with >= 10 total counts
+rna_counts <- rna_counts[low_counts_mask,]
+
+#update rna_genes with the low_counts_mas
+rna_genes <- rna_genes[low_counts_mask,]
+```
+
+```{r}
+?DESeqDataSetFromMatrix
+dds <- DESeqDataSetFromMatrix(countData = EO_rna_counts,
+                             colData = EO_rna_clinical,
+                             design = ~gender)
+
+?DESeq
+dds_obj <- DESeq(dds) # note: this will likely take a long time (ie 45 minutes to 2 hours)
+
+?resultsNames
+resultsNames(dds_obj)  # see what comparisons got run
+
+# get the young vs. old comparison
+?results
+EO_results <- results(dds_obj, format = "DataFrame", contrast = c("gender", "male", "female")) # this is case sensitive so be careful to match it with your age_category factors closely!
+```
+
+```{r}
+?DESeqDataSetFromMatrix
+dds <- DESeqDataSetFromMatrix(countData = LO_rna_counts,
+                             colData = LO_rna_clinical,
+                             design = ~gender)
+
+?DESeq
+dds_obj <- DESeq(dds) # note: this will likely take a long time (ie 45 minutes to 2 hours)
+
+?resultsNames
+resultsNames(dds_obj)  # see what comparisons got run
+
+# get the young vs. old comparison
+?results
+LO_results <- results(dds_obj, format = "DataFrame", contrast = c("gender", "male", "female")) # this is case sensitive so be careful to match it with your age_category factors closely!
+```
+```{r}
+# write code here, replace column#'s
+EO_results <- data.frame(rna_genes$gene_name, EO_results@rownames, EO_results@listData$log2FoldChange, EO_results@listData$pvalue, EO_results@listData$padj, -log10(EO_results@listData$padj))
+
+# HINT: to get the gene names, you will need to create a boolean mask that is T when rna_genes$gene_id %in% results@rownames, and F if otherwise, then use this mask to subset rna_genes$gene_names for only the names that are in the results df
+
+colnames(EO_results) <- c("Gene Name", "Gene ID", "Log2 Fold Change", "P-value", "PAdj", "-log10(PAdj)")
+```
+
+```{r}
+# write code here, replace column#'s
+LO_results <- data.frame(rna_genes$gene_name, LO_results@rownames, LO_results@listData$log2FoldChange, LO_results@listData$pvalue, LO_results@listData$padj, -log10(LO_results@listData$padj))
+
+# HINT: to get the gene names, you will need to create a boolean mask that is T when rna_genes$gene_id %in% results@rownames, and F if otherwise, then use this mask to subset rna_genes$gene_names for only the names that are in the results df
+
+colnames(LO_results) <- c("Gene Name", "Gene ID", "Log2 Fold Change", "P-value", "PAdj", "-log10(PAdj)")
+```
+
+```{r}
+# install (using BiocManager) and load "EnhancedVolcano"
+BiocManager::install("EnhancedVolcano")
+library(EnhancedVolcano)
+```
+
+```{r}
+# create plot here
+par(mar=c(1,1,1,1))
+EnhancedVolcano(EO_results, 
+                lab = results$`Gene Name`, 
+                x = "Log2 Fold Change", 
+                y = "PAdj")
+```
+```{r}
+# create plot here
+par(mar=c(1,1,1,1))
+EnhancedVolcano(LO_results, 
+                lab = results$`Gene Name`, 
+                x = "Log2 Fold Change", 
+                y = "PAdj")
+```
+
